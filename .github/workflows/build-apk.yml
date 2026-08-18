@@ -1,9 +1,9 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -18,6 +18,10 @@ jobs:
         with:
           flutter-version: '3.29.0'
           channel: stable
+          cache: true
+
+      - name: Generate Android project
+        run: flutter create --platforms=android --no-pub .
 
       - name: Install dependencies
         run: flutter pub get
