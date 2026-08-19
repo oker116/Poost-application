@@ -10,6 +10,13 @@ as $$
 declare aid uuid;
 begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
+  if p_username is null or length(trim(p_username)) = 0 then
+    raise exception 'username required';
+  end if;
+  -- Serialize concurrent first-run bootstrap attempts: without this lock,
+  -- two simultaneous calls could both pass the exists() check below before
+  -- either insert commits, creating two agencies/owners instead of one.
+  perform pg_advisory_xact_lock(hashtext('poost_bootstrap_owner'));
   if exists(select 1 from public.profiles) then raise exception 'owner already initialized'; end if;
   insert into public.agencies(name) values ('poost') returning id into aid;
   insert into public.profiles(id, agency_id, full_name, username, role, permissions)

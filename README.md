@@ -1,47 +1,40 @@
-# poost Media Buying OS V4 — Complete Android UI/Business Prototype
+# poost Media Buying OS — Android app + Supabase backend
 
-هذه النسخة تكمل طبقة التطبيق قبل أي ربط خارجي.
+هذا الريبو فيه تطبيق Flutter (Android) لإدارة شركة media buying، ومربوط فعليًا بمشروع Supabase حقيقي (auth + database)، وليس UI تجريبي فقط. راجع `PROJECT_STATUS.md` لتفاصيل حالة كل جزء.
 
-## موجود
-- Login UI
-- poost brand / dark agency UI
-- Owner Command Center
-- Clients + add client
-- Client details
-- Campaign Center
-- Creative Center + fatigue indicators
-- Finance + 20% spend / 10% sales commission
-- Monthly Reports + score
-- Alerts
-- AI Analyst screen
-- Client Portal preview مع عزل معلومات العمولة
-- Offline/demo-first data model
+## موجود وشغال فعليًا
+- Auth حقيقي عبر Supabase (username/password → synthetic email داخليًا)
+- توجيه حسب الدور (Owner / Media Buyer / Client) بعد تسجيل الدخول، كل دور بيشوف شاشة مختلفة
+- عزل بيانات العمولة عن دور الـ Client بشكل فعلي في الكود (مش بس في التصميم)
+- Row Level Security مفعّل على كل جداول قاعدة البيانات (`docs/MIGRATION_RLS_POLICIES.sql`) — كل يوزر بيشوف بيانات وكالته/عملائه فقط
+- شاشة إعدادات اتصال Meta Ads (UI فقط، بدون تخزين توكن دائم)
+- Edge Function محمي لإنشاء يوزرات جديدة (Media Buyer / Client) بمعرفة الـ Owner فقط
 
-## غير موصول بعد (مقصود)
-- Supabase / real database
-- Real authentication
-- Meta Ads API
+## لسه مش موصول (مقصود، مرحلة قادمة)
+- Meta Ads API sync فعلي (الشاشة موجودة، الربط الحقيقي لسه لأ)
 - Sales/CRM integration
 - Push notifications
-- Real AI API
+- AI Analyst حقيقي
 - PDF generation
-هذه مرحلة الربط الأخيرة بعد اعتماد الواجهة والـ business flow.
+- شاشات الـ Dashboard الفعلية لسه placeholders ("—") لحد ما يتم بناء استعلامات Supabase للـ KPIs
+
+## أول تشغيل (Setup)
+اتبع الترتيب في `docs/CONNECT_NOW.md` بالظبط:
+1. طبّق `docs/DATABASE_SCHEMA.sql`
+2. طبّق `docs/MIGRATION_AUTH_PERMISSIONS.sql`
+3. طبّق `docs/MIGRATION_RLS_POLICIES.sql` — **لازم تتطبق قبل أي استخدام حقيقي**، من غيرها البيانات مكشوفة لأي حد معاه الـ anon key
+4. Deploy لـ `supabase/functions/create-app-user`
+5. شغّل التطبيق واعمل "تهيئة Owner لأول مرة" باسم مستخدم وباسورد من اختيارك (مفيش بيانات دخول جاهزة في الكود عمدًا)
 
 ## Build APK
+```
 flutter pub get
+flutter analyze
+flutter test
 flutter build apk --release
+```
 
-
-## V5 Meta Ads Settings
-
-Added an in-app Meta Ads connection settings screen with:
-- Meta App ID
-- Ad Account ID
-- masked access-token field for prototype/testing
-- connection state
-- production architecture note: OAuth + secure backend token storage
-
-Production flow:
-Connect Meta -> OAuth -> select authorized ad accounts -> sync campaigns/ad sets/ads -> metrics -> dashboard.
-
-Do NOT hard-code or ship long-lived Meta access tokens in the APK.
+## أمان — قواعد ثابتة
+- ما فيش أي باسورد أو توكن حقيقي بيتكتب في الكود المصدري أبدًا
+- ما فيش تخزين دائم لـ Meta access token جوه التطبيق — الربط الحقيقي هيكون عبر OAuth + backend
+- كل جدول في قاعدة البيانات لازم يكون عليه RLS policy قبل ما يتفتح استخدامه من التطبيق

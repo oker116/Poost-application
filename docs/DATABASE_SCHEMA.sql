@@ -1,15 +1,18 @@
 -- Production-oriented schema blueprint.
 -- Apply with migrations in the backend, not directly from the APK.
+-- After this: apply MIGRATION_AUTH_PERMISSIONS.sql, then MIGRATION_RLS_POLICIES.sql.
+
+create extension if not exists pgcrypto;
 
 create table agencies (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   name text not null,
   currency text not null default 'EGP',
   created_at timestamptz not null default now()
 );
 
 create table profiles (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   agency_id uuid not null references agencies(id),
   full_name text not null,
   role text not null check (role in ('owner','media_buyer','client')),
@@ -18,7 +21,7 @@ create table profiles (
 );
 
 create table clients (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   agency_id uuid not null references agencies(id),
   company_name text not null,
   contact_name text,
@@ -31,14 +34,14 @@ create table clients (
 );
 
 create table client_assignments (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   client_id uuid not null references clients(id),
   profile_id uuid not null references profiles(id),
   unique(client_id, profile_id)
 );
 
 create table meta_connections (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   agency_id uuid not null references agencies(id),
   owner_profile_id uuid not null references profiles(id),
   provider text not null default 'meta',
@@ -50,7 +53,7 @@ create table meta_connections (
 );
 
 create table ad_accounts (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   connection_id uuid not null references meta_connections(id),
   client_id uuid references clients(id),
   external_account_id text not null,
@@ -61,7 +64,7 @@ create table ad_accounts (
 );
 
 create table campaigns (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   ad_account_id uuid not null references ad_accounts(id),
   external_id text not null,
   name text not null,
@@ -73,7 +76,7 @@ create table campaigns (
 );
 
 create table ad_sets (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   campaign_id uuid not null references campaigns(id),
   external_id text not null,
   name text not null,
@@ -83,7 +86,7 @@ create table ad_sets (
 );
 
 create table ads (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   ad_set_id uuid not null references ad_sets(id),
   external_id text not null,
   name text not null,
@@ -93,7 +96,7 @@ create table ads (
 );
 
 create table daily_metrics (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   client_id uuid not null references clients(id),
   metric_date date not null,
   spend numeric not null default 0,
@@ -106,7 +109,7 @@ create table daily_metrics (
 );
 
 create table campaign_metrics (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   campaign_id uuid not null references campaigns(id),
   metric_date date not null,
   spend numeric not null default 0,
@@ -118,7 +121,7 @@ create table campaign_metrics (
 );
 
 create table commissions (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   client_id uuid not null references clients(id),
   period_start date not null,
   period_end date not null,
@@ -134,7 +137,7 @@ create table commissions (
 );
 
 create table monthly_snapshots (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   client_id uuid not null references clients(id),
   month_start date not null,
   spend numeric not null default 0,
@@ -147,7 +150,7 @@ create table monthly_snapshots (
 );
 
 create table alerts (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   client_id uuid references clients(id),
   severity text not null,
   category text not null,
@@ -158,7 +161,7 @@ create table alerts (
 );
 
 create table audit_logs (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   agency_id uuid not null references agencies(id),
   actor_profile_id uuid references profiles(id),
   action text not null,
