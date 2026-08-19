@@ -1,16 +1,7 @@
-
 import 'package:flutter/material.dart';
-
-class MetaConnection {
-  final String appId;
-  final String adAccountId;
-  final bool connected;
-  const MetaConnection({
-    this.appId = '',
-    this.adAccountId = '',
-    this.connected = false,
-  });
-}
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'auth_service.dart';
 
 class MetaSettingsPage extends StatefulWidget {
   const MetaSettingsPage({super.key});
@@ -20,43 +11,69 @@ class MetaSettingsPage extends StatefulWidget {
 }
 
 class _MetaSettingsPageState extends State<MetaSettingsPage> {
-  final appId = TextEditingController();
-  final accountId = TextEditingController();
-  final token = TextEditingController();
-  bool obscure = true;
-  bool connected = false;
+  bool busy = false;
+  String? error;
+  Map<String, dynamic>? connection;
 
   @override
-  void dispose() {
-    appId.dispose();
-    accountId.dispose();
-    token.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadStatus();
   }
 
-  void connect() {
-    // UI-only V5:
-    // Never ship a long-lived Meta access token inside the APK.
-    // In the production integration, this button starts OAuth and the
-    // backend stores/refreshes credentials securely.
-    setState(() => connected = appId.text.trim().isNotEmpty &&
-        accountId.text.trim().isNotEmpty &&
-        token.text.trim().isNotEmpty);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(connected
-            ? 'تم تجهيز الاتصال. الربط الفعلي يتم عبر Backend/OAuth.'
-            : 'أكمل بيانات الاتصال أولاً.'),
-      ),
-    );
+  Future<void> _loadStatus() async {
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final row = await Supabase.instance.client
+          .from('meta_connections')
+          .select('status, external_user_id, last_sync_at, error_message')
+          .eq('provider', 'meta')
+          .maybeSingle();
+      if (mounted) setState(() => connection = row);
+    } catch (e) {
+      if (mounted) setState(() => error = describeAuthError(e));
+    }
+    if (mounted) setState(() => busy = false);
   }
+
+  Future<void> _connect() async {
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final res = await Supabase.instance.client.functions.invoke('meta-oauth-start');
+      final url = (res.data as Map?)?['url'] as String?;
+      if (url == null) throw Exception('لم يتم إرجاع رابط الاتصال');
+      final uri = Uri.parse(url);
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened) throw Exception('تعذر فتح المتصفح');
+    } catch (e) {
+      if (mounted) setState(() => error = describeAuthError(e));
+    }
+    if (mounted) setState(() => busy = false);
+  }
+
+  bool get connected => connection?['status'] == 'connected';
 
   @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Meta Ads')),
+        appBar: AppBar(
+          title: const Text('Meta Ads'),
+          actions: [
+            IconButton(
+              tooltip: 'تحديث الحالة',
+              onPressed: busy ? null : _loadStatus,
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+        ),
         body: ListView(
           padding: const EdgeInsets.all(18),
           children: [
@@ -80,62 +97,46 @@ class _MetaSettingsPageState extends State<MetaSettingsPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'اربط حساب الإعلانات ثم اسحب الحملات والإنفاق والنتائج تلقائيًا.',
+                      connected
+                          ? 'الحساب متصل. رقم حساب Meta: ${connection?['external_user_id'] ?? '—'}'
+                          : 'اربط حساب Meta عشان تقدر تشوف الإنفاق والنتائج تلقائيًا جوه poost.',
                       style: TextStyle(color: Colors.grey.shade400),
                     ),
+                    if (connection?['error_message'] != null) ...[
+                      const SizedBox(height: 8),
+                      Text('آخر خطأ: ${connection!['error_message']}',
+                          style: const TextStyle(color: Colors.orange)),
+                    ],
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: appId,
-              decoration: const InputDecoration(
-                labelText: 'Meta App ID',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: accountId,
-              decoration: const InputDecoration(
-                labelText: 'Ad Account ID',
-                hintText: 'مثال: act_123456789',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: token,
-              obscureText: obscure,
-              decoration: InputDecoration(
-                labelText: 'Access Token (للتجربة فقط)',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => obscure = !obscure),
-                  icon: Icon(obscure ? Icons.visibility : Icons.visibility_off),
-                ),
-              ),
+            const SizedBox(height: 16),
+            if (error != null) ...[
+              Text(error!, style: const TextStyle(color: Colors.orange)),
+              const SizedBox(height: 12),
+            ],
+            FilledButton.icon(
+              onPressed: busy ? null : _connect,
+              icon: const Icon(Icons.link),
+              label: Text(busy
+                  ? 'جارٍ الفتح...'
+                  : connected
+                      ? 'إعادة ربط / تحديث الصلاحية'
+                      : 'ربط حساب Meta'),
             ),
             const SizedBox(height: 10),
-            const Text(
-              '⚠️ في النسخة النهائية لن نخزن Access Token داخل التطبيق. سيتم استخدام OAuth وتخزين الاعتماديات بشكل آمن على الـ Backend.',
-              style: TextStyle(color: Colors.orange, fontSize: 12, height: 1.5),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: connect,
-              icon: const Icon(Icons.link),
-              label: Text(connected ? 'الاتصال مُجهّز' : 'حفظ وتجهيز الاتصال'),
+            Text(
+              'هيفتح المتصفح لصفحة تسجيل الدخول والموافقة على Meta. بعد ما توافق، ارجع للتطبيق ودوس تحديث الحالة (فوق يمين).',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 12, height: 1.6),
             ),
             const SizedBox(height: 18),
             const Divider(),
             const SizedBox(height: 8),
-            const Text('بعد الربط الفعلي سيصبح المسار:',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('ملاحظة أمان:', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             const Text(
-              'Connect → اختيار Ad Account → Sync → Campaigns → Ad Sets → Ads → Spend → Results → Dashboard',
+              'الـ Access Token بتاع Meta بيتخزن على السيرفر فقط (Supabase) ومش بيتحط جوه التطبيق أبدًا. سحب بيانات الحملات (spend/ROAS) بشكل يومي هي الخطوة الجاية بعد الربط.',
               style: TextStyle(height: 1.6),
             ),
           ],
