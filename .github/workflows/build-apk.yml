@@ -14,6 +14,10 @@ jobs:
       - name: Generate missing android/ platform folder
         run: flutter create --platforms=android .
       - run: flutter pub get
+      - name: Add missing INTERNET permission to release manifest
+        run: sed -i '1a\    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
+      - name: Generate app icon from brand asset
+        run: dart run flutter_launcher_icons
       - run: flutter analyze
         continue-on-error: true
       - run: flutter build apk --release
