@@ -13,7 +13,7 @@ class MetaSettingsPage extends StatefulWidget {
 class _MetaSettingsPageState extends State<MetaSettingsPage> {
   bool busy = false;
   String? error;
-  Map<String, dynamic>? connection;
+  Map<String, dynamic>? connection; // row from meta_connections, or null
 
   @override
   void initState() {

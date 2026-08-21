@@ -5,6 +5,8 @@ import 'supabase_config.dart';
 import 'auth_service.dart';
 import 'profile_service.dart';
 import 'meta_settings_page.dart';
+import 'ai_assistant_page.dart';
+import 'clients_page.dart';
 
 const bg = Color(0xFF070D18), surface = Color(0xFF0D1725), cyan = Color(0xFF42D7E8);
 
@@ -274,6 +276,11 @@ class _RoleScaffold extends StatelessWidget {
   Widget build(BuildContext c) => Scaffold(
         appBar: AppBar(title: Text(title), actions: [
           ...?actions,
+          IconButton(
+            tooltip: 'المساعد الذكي',
+            icon: const Icon(Icons.auto_awesome),
+            onPressed: () => Navigator.of(c).push(MaterialPageRoute(builder: (_) => const AiAssistantPage())),
+          ),
           IconButton(onPressed: () => Supabase.instance.client.auth.signOut(), icon: const Icon(Icons.logout)),
         ]),
         body: ListView(padding: const EdgeInsets.all(16), children: children),
@@ -297,14 +304,74 @@ class _Kpi extends StatelessWidget {
 }
 
 /// Owner: full agency visibility, including finance/commission — per
-/// docs/PRODUCT_SPEC.md § Roles → Owner.
-class OwnerHomePage extends StatelessWidget {
+/// docs/PRODUCT_SPEC.md § Roles → Owner. KPIs are computed live from
+/// daily_metrics/commissions (last 30 days) instead of being placeholders.
+class OwnerHomePage extends StatefulWidget {
   final AppProfile profile;
   const OwnerHomePage({super.key, required this.profile});
+  @override
+  State<OwnerHomePage> createState() => _OwnerHomePageState();
+}
+
+class _OwnerHomePageState extends State<OwnerHomePage> {
+  bool busy = true;
+  String? error;
+  double spend = 0, sales = 0, commission = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadKpis();
+  }
+
+  Future<void> _loadKpis() async {
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final db = Supabase.instance.client;
+      final clientRows = await db.from('clients').select('id');
+      final clientIds = (clientRows as List).map((r) => r['id'] as String).toList();
+
+      double s = 0, sa = 0, com = 0;
+      if (clientIds.isNotEmpty) {
+        final since = DateTime.now().subtract(const Duration(days: 30)).toIso8601String().substring(0, 10);
+        final metrics = await db
+            .from('daily_metrics')
+            .select('spend, sales')
+            .inFilter('client_id', clientIds)
+            .gte('metric_date', since);
+        for (final row in (metrics as List)) {
+          s += (row['spend'] as num).toDouble();
+          sa += (row['sales'] as num).toDouble();
+        }
+        final commissions = await db
+            .from('commissions')
+            .select('total_commission')
+            .inFilter('client_id', clientIds);
+        for (final row in (commissions as List)) {
+          com += (row['total_commission'] as num?)?.toDouble() ?? 0;
+        }
+      }
+      if (mounted) setState(() { spend = s; sales = sa; commission = com; });
+    } catch (e) {
+      if (mounted) setState(() => error = describeAuthError(e));
+    }
+    if (mounted) setState(() => busy = false);
+  }
+
+  double get roas => spend > 0 ? sales / spend : 0;
+
   @override
   Widget build(BuildContext c) => _RoleScaffold(
         title: 'poost Command Center',
         actions: [
+          IconButton(
+            tooltip: 'العملاء',
+            icon: const Icon(Icons.groups),
+            onPressed: () => Navigator.of(c).push(MaterialPageRoute(builder: (_) => const ClientsPage())).then((_) => _loadKpis()),
+          ),
           IconButton(
             tooltip: 'Meta Ads',
             icon: const Icon(Icons.campaign),
@@ -312,24 +379,35 @@ class OwnerHomePage extends StatelessWidget {
           ),
         ],
         children: [
-          Text('أهلًا ${profile.fullName}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          Text('أهلًا ${widget.profile.fullName}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text('آخر 30 يوم', style: TextStyle(color: Colors.grey.shade500)),
           const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: _Kpi('Ad Spend', '—')),
-            const SizedBox(width: 10),
-            Expanded(child: _Kpi('Sales', '—')),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: _Kpi('ROAS', '—')),
-            const SizedBox(width: 10),
-            Expanded(child: _Kpi('Commission', '—')), // owner-only KPI
-          ]),
+          if (busy) const Center(child: CircularProgressIndicator()),
+          if (error != null) Text(error!, style: const TextStyle(color: Colors.orange)),
+          if (!busy) ...[
+            Row(children: [
+              Expanded(child: _Kpi('Ad Spend', spend.toStringAsFixed(0))),
+              const SizedBox(width: 10),
+              Expanded(child: _Kpi('Sales', sales.toStringAsFixed(0))),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: _Kpi('ROAS', roas.toStringAsFixed(2))),
+              const SizedBox(width: 10),
+              Expanded(child: _Kpi('Commission', commission.toStringAsFixed(0))), // owner-only KPI
+            ]),
+          ],
           const SizedBox(height: 20),
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(18),
-              child: Text('سيتم تحميل بيانات العملاء والحملات من Supabase بعد اكتمال مزامنة الحسابات.'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.groups),
+              title: const Text('العملاء وبيانات الأداء'),
+              subtitle: const Text('أضف عميل جديد أو حدّث بيانات الإنفاق والمبيعات يدويًا'),
+              trailing: const Icon(Icons.chevron_left),
+              onTap: () => Navigator.of(c)
+                  .push(MaterialPageRoute(builder: (_) => const ClientsPage()))
+                  .then((_) => _loadKpis()),
             ),
           ),
         ],
