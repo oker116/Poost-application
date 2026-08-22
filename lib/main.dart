@@ -8,6 +8,8 @@ import 'meta_settings_page.dart';
 import 'ai_assistant_page.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'clients_page.dart';
+import 'my_accounts_page.dart';
+import 'clients_profitability_page.dart';
 
 const bg = Color(0xFF070D18), surface = Color(0xFF0D1725), cyan = Color(0xFF42D7E8);
 
@@ -503,6 +505,26 @@ class _OwnerHomePageState extends State<OwnerHomePage> {
               onTap: () => Navigator.of(c)
                   .push(MaterialPageRoute(builder: (_) => const ClientsPage()))
                   .then((_) => _loadKpis()),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Card(
+            child: ListTile(
+              leading: Icon(Icons.savings, color: commission - 0 >= 0 ? Colors.greenAccent : Colors.redAccent),
+              title: const Text('حساباتي — ربحية الوكالة'),
+              subtitle: const Text('العمولات مقابل المصاريف: شركتك بتكسب ولا لأ'),
+              trailing: const Icon(Icons.chevron_left),
+              onTap: () => Navigator.of(c).push(MaterialPageRoute(builder: (_) => const MyAccountsPage())),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.bar_chart),
+              title: const Text('أرباح العملاء'),
+              subtitle: const Text('كل عميل بيكسب ولا بيخسر، بالتفصيل ومقارنة برسم بياني'),
+              trailing: const Icon(Icons.chevron_left),
+              onTap: () => Navigator.of(c).push(MaterialPageRoute(builder: (_) => const ClientsProfitabilityPage())),
             ),
           ),
         ],

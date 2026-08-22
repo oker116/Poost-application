@@ -5,6 +5,10 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'auth_service.dart';
+import 'clients_page.dart';
+import 'my_accounts_page.dart';
+import 'clients_profitability_page.dart';
+import 'meta_settings_page.dart' show MetaSettingsPage;
 
 enum _OrbState { idle, listening, thinking, speaking }
 
@@ -138,7 +142,9 @@ class _AiAssistantPageState extends State<AiAssistantPage> with SingleTickerProv
         'ai-assistant',
         body: {'messages': _messages.map((m) => {'role': m.role, 'content': m.content}).toList()},
       );
-      final reply = (res.data as Map?)?['reply'] as String?;
+      final data = res.data as Map?;
+      final reply = data?['reply'] as String?;
+      final navigate = data?['navigate'] as String?;
       if (reply == null || reply.isEmpty) throw Exception('لم يصل رد من المساعد');
       setState(() => _messages.add(_ChatMessage('assistant', reply)));
       if (fromVoice || _voiceMode) {
@@ -147,6 +153,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> with SingleTickerProv
       } else {
         setState(() => _state = _OrbState.idle);
       }
+      if (navigate != null && mounted) _navigateTo(navigate);
     } catch (e) {
       setState(() {
         _error = describeAuthError(e);
@@ -154,6 +161,19 @@ class _AiAssistantPageState extends State<AiAssistantPage> with SingleTickerProv
       });
     }
     _scrollToBottom();
+  }
+
+  void _navigateTo(String key) {
+    final Widget? page = switch (key) {
+      'clients' => const ClientsPage(),
+      'my_accounts' => const MyAccountsPage(),
+      'profitability' => const ClientsProfitabilityPage(),
+      'meta' => const MetaSettingsPage(),
+      _ => null,
+    };
+    if (page != null) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+    }
   }
 
   void _scrollToBottom() {

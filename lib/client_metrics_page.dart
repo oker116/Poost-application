@@ -43,7 +43,11 @@ class _ClientMetricsPageState extends State<ClientMetricsPage> {
 
   double get totalSpend => rows.fold(0.0, (s, r) => s + (r['spend'] as num).toDouble());
   double get totalSales => rows.fold(0.0, (s, r) => s + (r['sales'] as num).toDouble());
+  int get totalOrders => rows.fold(0, (s, r) => s + ((r['orders'] as num?)?.toInt() ?? 0));
+  int get totalLeads => rows.fold(0, (s, r) => s + ((r['leads'] as num?)?.toInt() ?? 0));
   double get roas => totalSpend > 0 ? totalSales / totalSpend : 0;
+  double get cpa => totalOrders > 0 ? totalSpend / totalOrders : 0;
+  double get cpl => totalLeads > 0 ? totalSpend / totalLeads : 0;
 
   Future<void> _addEntryDialog() async {
     DateTime date = DateTime.now();
@@ -172,6 +176,14 @@ class _ClientMetricsPageState extends State<ClientMetricsPage> {
                     ),
                     const SizedBox(height: 10),
                     _kpi('ROAS (آخر 60 يوم مسجلة)', roas.toStringAsFixed(2), icon: Icons.trending_up, accent: const Color(0xFF42D7E8)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(child: _kpi('تكلفة الطلب (CPA)', cpa > 0 ? cpa.toStringAsFixed(0) : '—', icon: Icons.shopping_cart, accent: Colors.amber)),
+                        const SizedBox(width: 10),
+                        Expanded(child: _kpi('تكلفة الليد (CPL)', cpl > 0 ? cpl.toStringAsFixed(0) : '—', icon: Icons.person_add, accent: Colors.tealAccent)),
+                      ],
+                    ),
                     const SizedBox(height: 18),
                     const Text('السجل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 8),

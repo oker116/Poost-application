@@ -100,6 +100,36 @@ class _ClientsPageState extends State<ClientsPage> {
     );
   }
 
+  Future<void> _deleteClient(Map<String, dynamic> client) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('حذف العميل؟'),
+          content: Text('هيتم حذف "${client['company_name']}" وكل بياناته (الإنفاق والمبيعات المسجلة). الإجراء ده مش قابل للتراجع.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('حذف نهائيًا'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await Supabase.instance.client.from('clients').delete().eq('id', client['id']);
+      _load();
+    } catch (e) {
+      if (mounted) {
+        setState(() => error = describeAuthError(e));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -140,7 +170,17 @@ class _ClientsPageState extends State<ClientsPage> {
                                   if (c['industry'] != null) c['industry'],
                                   c['status'],
                                 ].whereType<String>().join(' • ')),
-                                trailing: const Icon(Icons.chevron_left),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'حذف',
+                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                      onPressed: () => _deleteClient(c),
+                                    ),
+                                    const Icon(Icons.chevron_left),
+                                  ],
+                                ),
                                 onTap: () => Navigator.of(context).push(MaterialPageRoute(
                                   builder: (_) => ClientMetricsPage(
                                     clientId: c['id'] as String,
