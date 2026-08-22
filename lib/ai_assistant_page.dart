@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'auth_service.dart';
 
 enum _OrbState { idle, listening, thinking, speaking }
@@ -38,11 +39,21 @@ class _AiAssistantPageState extends State<AiAssistantPage> with SingleTickerProv
   void initState() {
     super.initState();
     _anim = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
-    _initSpeech();
     _initTts();
   }
 
   Future<void> _initSpeech() async {
+    final status = await Permission.microphone.request();
+    if (!status.isGranted) {
+      if (mounted) {
+        setState(() {
+          _error = status.isPermanentlyDenied
+              ? 'صلاحية الميكروفون مرفوضة بشكل دائم. روح إعدادات التطبيق وفعّلها يدويًا.'
+              : 'محتاجين صلاحية الميكروفون عشان الوضع الصوتي يشتغل.';
+        });
+      }
+      return;
+    }
     _speechReady = await _speech.initialize(
       onError: (e) => setState(() => _error = 'خطأ في الميكروفون: ${e.errorMsg}'),
       onStatus: (status) {
@@ -80,8 +91,10 @@ class _AiAssistantPageState extends State<AiAssistantPage> with SingleTickerProv
 
   Future<void> _startListening() async {
     if (!_speechReady) {
-      setState(() => _error = 'الميكروفون مش جاهز. تأكد من صلاحية الميكروفون للتطبيق.');
-      return;
+      await _initSpeech();
+    }
+    if (!_speechReady) {
+      return; // _initSpeech already set a clear error message
     }
     setState(() {
       _state = _OrbState.listening;

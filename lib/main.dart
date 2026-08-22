@@ -6,6 +6,7 @@ import 'auth_service.dart';
 import 'profile_service.dart';
 import 'meta_settings_page.dart';
 import 'ai_assistant_page.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'clients_page.dart';
 
 const bg = Color(0xFF070D18), surface = Color(0xFF0D1725), cyan = Color(0xFF42D7E8);
@@ -288,24 +289,38 @@ class _RoleScaffold extends StatelessWidget {
 }
 
 class _Kpi extends StatelessWidget {
-  final String a, b;
-  const _Kpi(this.a, this.b);
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color accent;
+  const _Kpi(this.label, this.value, {this.icon = Icons.insights, this.accent = cyan});
   @override
-  Widget build(BuildContext c) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(a),
-            const SizedBox(height: 8),
-            Text(b, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          ]),
+  Widget build(BuildContext c) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: accent.withOpacity(0.25)),
+          boxShadow: [BoxShadow(color: accent.withOpacity(0.08), blurRadius: 16, spreadRadius: 1)],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(icon, size: 16, color: accent),
+              const SizedBox(width: 6),
+              Expanded(child: Text(label, style: TextStyle(color: Colors.grey.shade400, fontSize: 12))),
+            ]),
+            const SizedBox(height: 10),
+            Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: accent)),
+          ],
         ),
       );
 }
 
 /// Owner: full agency visibility, including finance/commission — per
-/// docs/PRODUCT_SPEC.md § Roles → Owner. KPIs are computed live from
-/// daily_metrics/commissions (last 30 days) instead of being placeholders.
+/// docs/PRODUCT_SPEC.md § Roles → Owner. KPIs and the trend chart are
+/// computed live from daily_metrics/commissions.
 class OwnerHomePage extends StatefulWidget {
   final AppProfile profile;
   const OwnerHomePage({super.key, required this.profile});
@@ -313,10 +328,19 @@ class OwnerHomePage extends StatefulWidget {
   State<OwnerHomePage> createState() => _OwnerHomePageState();
 }
 
+class _DayPoint {
+  final DateTime date;
+  final double spend;
+  final double sales;
+  _DayPoint(this.date, this.spend, this.sales);
+}
+
 class _OwnerHomePageState extends State<OwnerHomePage> {
   bool busy = true;
   String? error;
   double spend = 0, sales = 0, commission = 0;
+  int clientCount = 0;
+  List<_DayPoint> trend = [];
 
   @override
   void initState() {
@@ -335,26 +359,47 @@ class _OwnerHomePageState extends State<OwnerHomePage> {
       final clientIds = (clientRows as List).map((r) => r['id'] as String).toList();
 
       double s = 0, sa = 0, com = 0;
+      final byDate = <String, _DayPoint>{};
+      final now = DateTime.now();
+      for (int i = 13; i >= 0; i--) {
+        final d = DateTime(now.year, now.month, now.day).subtract(Duration(days: i));
+        byDate[d.toIso8601String().substring(0, 10)] = _DayPoint(d, 0, 0);
+      }
+
       if (clientIds.isNotEmpty) {
-        final since = DateTime.now().subtract(const Duration(days: 30)).toIso8601String().substring(0, 10);
+        final since30 = now.subtract(const Duration(days: 30)).toIso8601String().substring(0, 10);
         final metrics = await db
             .from('daily_metrics')
-            .select('spend, sales')
+            .select('metric_date, spend, sales')
             .inFilter('client_id', clientIds)
-            .gte('metric_date', since);
+            .gte('metric_date', since30);
         for (final row in (metrics as List)) {
-          s += (row['spend'] as num).toDouble();
-          sa += (row['sales'] as num).toDouble();
+          final sp = (row['spend'] as num).toDouble();
+          final sl = (row['sales'] as num).toDouble();
+          s += sp;
+          sa += sl;
+          final key = row['metric_date'].toString();
+          final existing = byDate[key];
+          if (existing != null) {
+            byDate[key] = _DayPoint(existing.date, existing.spend + sp, existing.sales + sl);
+          }
         }
-        final commissions = await db
-            .from('commissions')
-            .select('total_commission')
-            .inFilter('client_id', clientIds);
+        final commissions = await db.from('commissions').select('total_commission').inFilter('client_id', clientIds);
         for (final row in (commissions as List)) {
           com += (row['total_commission'] as num?)?.toDouble() ?? 0;
         }
       }
-      if (mounted) setState(() { spend = s; sales = sa; commission = com; });
+
+      final sortedTrend = byDate.values.toList()..sort((a, b) => a.date.compareTo(b.date));
+      if (mounted) {
+        setState(() {
+          spend = s;
+          sales = sa;
+          commission = com;
+          clientCount = clientIds.length;
+          trend = sortedTrend;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => error = describeAuthError(e));
     }
@@ -379,26 +424,76 @@ class _OwnerHomePageState extends State<OwnerHomePage> {
           ),
         ],
         children: [
-          Text('أهلًا ${widget.profile.fullName}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text('آخر 30 يوم', style: TextStyle(color: Colors.grey.shade500)),
-          const SizedBox(height: 16),
+          // --- header banner ---
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                colors: [cyan.withOpacity(0.18), surface],
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+              ),
+              border: Border.all(color: cyan.withOpacity(0.25)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: cyan.withOpacity(0.15)),
+                  child: Icon(Icons.workspace_premium, color: cyan, size: 26),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('أهلًا ${widget.profile.fullName}',
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text('$clientCount عميل • آخر 30 يوم', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
           if (busy) const Center(child: CircularProgressIndicator()),
           if (error != null) Text(error!, style: const TextStyle(color: Colors.orange)),
           if (!busy) ...[
             Row(children: [
-              Expanded(child: _Kpi('Ad Spend', spend.toStringAsFixed(0))),
+              Expanded(child: _Kpi('Ad Spend', spend.toStringAsFixed(0), icon: Icons.attach_money, accent: Colors.orangeAccent)),
               const SizedBox(width: 10),
-              Expanded(child: _Kpi('Sales', sales.toStringAsFixed(0))),
+              Expanded(child: _Kpi('Sales', sales.toStringAsFixed(0), icon: Icons.point_of_sale, accent: Colors.greenAccent)),
             ]),
             const SizedBox(height: 10),
             Row(children: [
-              Expanded(child: _Kpi('ROAS', roas.toStringAsFixed(2))),
+              Expanded(child: _Kpi('ROAS', roas.toStringAsFixed(2), icon: Icons.trending_up, accent: cyan)),
               const SizedBox(width: 10),
-              Expanded(child: _Kpi('Commission', commission.toStringAsFixed(0))), // owner-only KPI
+              Expanded(child: _Kpi('Commission', commission.toStringAsFixed(0), icon: Icons.savings, accent: Colors.purpleAccent)), // owner-only KPI
             ]),
+            const SizedBox(height: 20),
+            if (trend.any((p) => p.spend > 0 || p.sales > 0)) ...[
+              const Text('اتجاه آخر 14 يوم', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 10),
+              Container(
+                height: 190,
+                padding: const EdgeInsets.fromLTRB(6, 16, 16, 6),
+                decoration: BoxDecoration(color: surface, borderRadius: BorderRadius.circular(16)),
+                child: _TrendChart(points: trend),
+              ),
+              Row(
+                children: [
+                  _legendDot(Colors.orangeAccent, 'Spend'),
+                  const SizedBox(width: 16),
+                  _legendDot(Colors.greenAccent, 'Sales'),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
           ],
-          const SizedBox(height: 20),
           Card(
             child: ListTile(
               leading: const Icon(Icons.groups),
@@ -412,6 +507,75 @@ class _OwnerHomePageState extends State<OwnerHomePage> {
           ),
         ],
       );
+
+  Widget _legendDot(Color color, String label) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+        ],
+      );
+}
+
+class _TrendChart extends StatelessWidget {
+  final List<_DayPoint> points;
+  const _TrendChart({required this.points});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxY = points
+            .map((p) => p.spend > p.sales ? p.spend : p.sales)
+            .fold<double>(0, (m, v) => v > m ? v : m) *
+        1.2;
+    return LineChart(
+      LineChartData(
+        minY: 0,
+        maxY: maxY <= 0 ? 10 : maxY,
+        gridData: FlGridData(show: true, horizontalInterval: (maxY <= 0 ? 10 : maxY) / 4, drawVerticalLine: false, getDrawingHorizontalLine: (_) => FlLine(color: Colors.white10, strokeWidth: 1)),
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 24,
+              interval: 3,
+              getTitlesWidget: (value, meta) {
+                final i = value.toInt();
+                if (i < 0 || i >= points.length) return const SizedBox.shrink();
+                final d = points[i].date;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text('${d.day}/${d.month}', style: TextStyle(color: Colors.grey.shade600, fontSize: 10)),
+                );
+              },
+            ),
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: [for (int i = 0; i < points.length; i++) FlSpot(i.toDouble(), points[i].spend)],
+            isCurved: true,
+            color: Colors.orangeAccent,
+            barWidth: 2.5,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(show: true, color: Colors.orangeAccent.withOpacity(0.08)),
+          ),
+          LineChartBarData(
+            spots: [for (int i = 0; i < points.length; i++) FlSpot(i.toDouble(), points[i].sales)],
+            isCurved: true,
+            color: Colors.greenAccent,
+            barWidth: 2.5,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(show: true, color: Colors.greenAccent.withOpacity(0.08)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Media buyer: assigned clients only, no finance/commission — per

@@ -40,8 +40,9 @@ String describeAuthError(Object error) {
   if (error is PostgrestException) {
     return 'تعذر إكمال العملية على قاعدة البيانات: ${error.message}';
   }
-  // Network/timeout/anything else we don't want to expose raw details of.
-  return 'تعذر الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى.';
+  // Network/timeout/anything else: show the real exception text instead of
+  // a generic message, so problems are diagnosable from a screenshot alone.
+  return 'خطأ: ${error.toString()}';
 }
 
 class AppAuth {

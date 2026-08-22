@@ -165,13 +165,13 @@ class _ClientMetricsPageState extends State<ClientMetricsPage> {
                     if (error != null) Text(error!, style: const TextStyle(color: Colors.orange)),
                     Row(
                       children: [
-                        Expanded(child: _kpi('إجمالي الإنفاق', totalSpend.toStringAsFixed(0))),
+                        Expanded(child: _kpi('إجمالي الإنفاق', totalSpend.toStringAsFixed(0), icon: Icons.attach_money, accent: Colors.orangeAccent)),
                         const SizedBox(width: 10),
-                        Expanded(child: _kpi('إجمالي المبيعات', totalSales.toStringAsFixed(0))),
+                        Expanded(child: _kpi('إجمالي المبيعات', totalSales.toStringAsFixed(0), icon: Icons.point_of_sale, accent: Colors.greenAccent)),
                       ],
                     ),
                     const SizedBox(height: 10),
-                    _kpi('ROAS (آخر 60 يوم مسجلة)', roas.toStringAsFixed(2)),
+                    _kpi('ROAS (آخر 60 يوم مسجلة)', roas.toStringAsFixed(2), icon: Icons.trending_up, accent: const Color(0xFF42D7E8)),
                     const SizedBox(height: 18),
                     const Text('السجل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 8),
@@ -204,14 +204,21 @@ class _ClientMetricsPageState extends State<ClientMetricsPage> {
     );
   }
 
-  Widget _kpi(String label, String value) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: TextStyle(color: Colors.grey.shade400)),
-            const SizedBox(height: 6),
-            Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          ]),
+  Widget _kpi(String label, String value, {IconData icon = Icons.insights, Color accent = const Color(0xFF42D7E8)}) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D1725),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: accent.withOpacity(0.25)),
         ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(icon, size: 16, color: accent),
+            const SizedBox(width: 6),
+            Expanded(child: Text(label, style: TextStyle(color: Colors.grey.shade400, fontSize: 12))),
+          ]),
+          const SizedBox(height: 10),
+          Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: accent)),
+        ]),
       );
 }
